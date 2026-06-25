@@ -146,21 +146,14 @@
   .rule .ic{width:34px;height:34px;border:1px solid rgba(244,241,230,.4);border-radius:50%;display:flex;align-items:center;justify-content:center}
   .rule .ic svg{width:18px;height:18px}
 
-  /* entry pass / QR */
-  .pass{
-    background:rgba(244,241,230,.95);
-    border-radius:12px;padding:14px 16px 12px;margin:22px auto 4px;max-width:178px;
-    text-align:center;color:#5a5d4d;
-    box-shadow:0 8px 22px rgba(40,42,34,.25);
-  }
-  .pass-h{font-size:11px;letter-spacing:2px;color:#7a7d6c;margin-bottom:9px}
-  .qr{width:118px;height:118px;display:block;margin:0 auto}
-  .pass-num{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:#43463a;margin-top:8px;letter-spacing:1px}
-  .pass-count{
-    font-size:12.5px;color:#5a5d4d;margin-top:8px;padding-top:8px;
-    border-top:1px dashed rgba(90,93,77,.35);
-  }
-  .pass-count b{color:#3f4234;font-weight:700}
+  /* personal note */
+  .personal{text-align:center;margin:24px auto 4px;max-width:260px}
+  .personal .pline{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--cream-soft)}
+  .personal .pline::before,.personal .pline::after{content:"";height:1px;width:34px;background:linear-gradient(90deg,transparent,rgba(244,241,230,.5))}
+  .personal .pline::after{transform:scaleX(-1)}
+  .personal .pt{font-family:'Aref Ruqaa',serif;font-size:17px;color:var(--cream);letter-spacing:.5px}
+  .personal .pc{font-size:13.5px;color:var(--cream-soft);opacity:.9;margin-top:7px}
+  .personal .pc b{color:var(--gold-l);font-weight:700}
 
   .flowers{display:block;width:100%;margin-top:14px;margin-bottom:-2px}
   .flowers svg{display:block;width:100%;height:auto}
@@ -264,11 +257,8 @@
         </div>
       </div>
 
-      <div class="pass" id="pass">
-        <div class="pass-h">بطاقة دخول الحفل</div>
-        <svg class="qr" id="qr" shape-rendering="crispEdges"></svg>
-        <div class="pass-num" id="passNoNum">٠٠</div>
-        <div class="pass-count" id="passCount">لـ <b>شخص واحد</b></div>
+      <div class="personal">
+        <div class="pline"><span class="pt">دعوة شخصية</span></div>
       </div>
     </div>
 
@@ -319,53 +309,57 @@
 
   const arNum=n=>String(n).replace(/\d/g,d=>'٠١٢٣٤٥٦٧٨٩'[d]);
 
-  // personalized guest name (?name=) + guest count (?count=)
+  /* ===== shared signing helpers (keep identical in generate.html) ===== */
+  const SECRET='mA-2026-eng-7Qz9Kx';                       // غيّريه لأي كلمة سرية تخصك
+  function sig(str){                                         // cyrb53 -> hex
+    let h1=0xdeadbeef,h2=0x41c6ce57;
+    for(let i=0;i<str.length;i++){const c=str.charCodeAt(i);h1=Math.imul(h1^c,2654435761);h2=Math.imul(h2^c,1597334677);}
+    h1=Math.imul(h1^(h1>>>16),2246822507);h1^=Math.imul(h2^(h2>>>13),3266489909);
+    h2=Math.imul(h2^(h2>>>16),2246822507);h2^=Math.imul(h1^(h1>>>13),3266489909);
+    return (4294967296*(2097151&h2)+(h1>>>0)).toString(16).padStart(11,'0').slice(0,10);
+  }
+  function b64d(s){s=s.replace(/-/g,'+').replace(/_/g,'/');return decodeURIComponent(escape(atob(s)));}
+  function decodeToken(t){
+    try{
+      const raw=b64d(t),parts=raw.split('|');
+      if(parts.length!==4)return null;
+      const[name,count,id,s]=parts;
+      if(sig(name+'|'+count+'|'+id+'|'+SECRET)!==s)return null;   // توقيع غير صحيح
+      return{name,count:parseInt(count,10),id};
+    }catch(e){return null;}
+  }
+
+  // read signed token (?t=) — falls back to plain params only for local preview
   (function(){
     const p=new URLSearchParams(location.search);
-    let name=(p.get('name')||p.get('guest')||'').trim();
-    let count=parseInt(p.get('count')||p.get('n')||'1',10);
+    let name='',count=1,invNo=null,valid=true;
+
+    const t=p.get('t');
+    if(t){
+      const d=decodeToken(t);
+      if(d){name=d.name;count=d.count;invNo=d.id;}
+      else{valid=false;}                       // رابط معدّل/غير صالح
+    }else if(p.get('name')||p.get('count')){   // وضع المعاينة فقط (غير موقّع)
+      name=(p.get('name')||'').trim();
+      count=parseInt(p.get('count')||'1',10);
+      invNo=p.get('id');
+    }
+
     if(!Number.isFinite(count)||count<1)count=1;
     if(count>50)count=50;
 
+    if(!valid){
+      name='';
+      document.getElementById('coverName').textContent='دعوة غير صالحة';
+    }
+
     if(name){
-      name=name.replace(/[<>]/g,'').slice(0,40);
+      name=name.replace(/[<>|]/g,'').slice(0,40);
       document.getElementById('coverName').textContent=name;
       document.getElementById('guestName').textContent=name;
       document.getElementById('guestC').classList.remove('empty');
       document.title=name+' — حفل خطوبة منار و عمار';
     }
-
-    // guest count line
-    const word = count===1 ? 'شخص واحد' : (count===2 ? 'شخصين' : arNum(count)+' أشخاص');
-    document.getElementById('passCount').innerHTML='لـ <b>'+word+'</b>';
-
-    // deterministic hash from name+count (each guest = unique QR)
-    const seed=(name||'guest')+'|'+count;
-    let h=2166136261;
-    for(const c of seed){h^=c.charCodeAt(0);h=(h*16777619)>>>0;}
-    const rnd=()=>{h=(h*1664525+1013904223)>>>0;return h/4294967296;};
-
-    // fake QR-style square code (decorative)
-    const N=25,col='#3a3d33';let cells='';
-    const finder=(ox,oy)=>{
-      cells+='<rect x="'+ox+'" y="'+oy+'" width="7" height="7" fill="'+col+'"/>';
-      cells+='<rect x="'+(ox+1)+'" y="'+(oy+1)+'" width="5" height="5" fill="#f4f1e6"/>';
-      cells+='<rect x="'+(ox+2)+'" y="'+(oy+2)+'" width="3" height="3" fill="'+col+'"/>';
-    };
-    const inFinder=(x,y)=>(x<8&&y<8)||(x>N-9&&y<8)||(x<8&&y>N-9);
-    for(let y=0;y<N;y++)for(let x=0;x<N;x++){
-      if(inFinder(x,y))continue;
-      if(rnd()>0.5)cells+='<rect x="'+x+'" y="'+y+'" width="1" height="1" fill="'+col+'"/>';
-    }
-    finder(0,0);finder(N-7,0);finder(0,N-7);
-    const qr=document.getElementById('qr');
-    qr.setAttribute('viewBox','0 0 '+N+' '+N);
-    qr.innerHTML=cells;
-
-    // invitation number under the QR: ?id= overrides, else derived from hash
-    let invNo=parseInt(p.get('id')||p.get('no')||'',10);
-    if(!Number.isFinite(invNo)||invNo<1)invNo=(h%900)+100; // 100..999
-    document.getElementById('passNoNum').textContent=arNum(invNo);
   })();
 
   // reveal card on button click OR on scroll into view
